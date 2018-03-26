@@ -34,16 +34,81 @@ func TestTLS_CertificateInfoIsEqual_TrueWhenEmpty(t *testing.T) {
 }
 
 func TestTLS_CertificateInfoIsEqual_FalseWhenUnequal(t *testing.T) {
-	assert := assert.New(t)
-	a := &TLSConfig{CAFile: "abc", CertFile: "def", KeyFile: "ghi"}
-	b := &TLSConfig{CAFile: "jkl", CertFile: "def", KeyFile: "ghi"}
-	assert.False(a.CertificateInfoIsEqual(b))
+	const (
+		cafile   = "../../../helper/tlsutil/testdata/ca.pem"
+		foocert  = "../../../helper/tlsutil/testdata/nomad-foo.pem"
+		fookey   = "../../../helper/tlsutil/testdata/nomad-foo-key.pem"
+		foocert2 = "../../../helper/tlsutil/testdata/nomad-bad.pem"
+		fookey2  = "../../../helper/tlsutil/testdata/nomad-bad-key.pem"
+	)
+
+	// Assert that both mismatching certificate and key files are considered
+	// unequal
+	{
+		assert := assert.New(t)
+		a := &TLSConfig{
+			CAFile:   cafile,
+			CertFile: foocert,
+			KeyFile:  fookey,
+		}
+		b := &TLSConfig{
+			CAFile:   cafile,
+			CertFile: foocert2,
+			KeyFile:  fookey2,
+		}
+		assert.False(a.CertificateInfoIsEqual(b))
+	}
+
+	// Assert that mismatching certificate are considered unequal
+	{
+		assert := assert.New(t)
+		a := &TLSConfig{
+			CAFile:   cafile,
+			CertFile: foocert,
+			KeyFile:  fookey,
+		}
+		b := &TLSConfig{
+			CAFile:   cafile,
+			CertFile: foocert2,
+			KeyFile:  fookey,
+		}
+		assert.False(a.CertificateInfoIsEqual(b))
+	}
+
+	// Assert that mismatching keys are considered unequal
+	{
+		assert := assert.New(t)
+		a := &TLSConfig{
+			CAFile:   cafile,
+			CertFile: foocert,
+			KeyFile:  fookey,
+		}
+		b := &TLSConfig{
+			CAFile:   cafile,
+			CertFile: foocert,
+			KeyFile:  fookey2,
+		}
+		assert.False(a.CertificateInfoIsEqual(b))
+	}
 }
 
 func TestTLS_CertificateInfoIsEqual_TrueWhenEqual(t *testing.T) {
+	const (
+		cafile  = "../../../helper/tlsutil/testdata/ca.pem"
+		foocert = "../../../helper/tlsutil/testdata/nomad-foo.pem"
+		fookey  = "../../../helper/tlsutil/testdata/nomad-foo-key.pem"
+	)
 	assert := assert.New(t)
-	a := &TLSConfig{CAFile: "abc", CertFile: "def", KeyFile: "ghi"}
-	b := &TLSConfig{CAFile: "abc", CertFile: "def", KeyFile: "ghi"}
+	a := &TLSConfig{
+		CAFile:   cafile,
+		CertFile: foocert,
+		KeyFile:  fookey,
+	}
+	b := &TLSConfig{
+		CAFile:   cafile,
+		CertFile: foocert,
+		KeyFile:  fookey,
+	}
 	assert.True(a.CertificateInfoIsEqual(b))
 }
 

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"crypto/md5"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"os"
 	"sync"
 )
 
@@ -47,6 +50,11 @@ type TLSConfig struct {
 
 	// Verify connections to the HTTPS API
 	VerifyHTTPSClient bool `mapstructure:"verify_https_client"`
+
+	// Checksum is a MD5 hash of the certificate CA File, Certificate file, and
+	// key file. This is used when deciding whether to reload a particular agnet
+	// in the case of a SIGHUP
+	Checksum string
 }
 
 type KeyLoader struct {
@@ -138,6 +146,8 @@ func (t *TLSConfig) Copy() *TLSConfig {
 	new.KeyFile = t.KeyFile
 	new.RPCUpgradeMode = t.RPCUpgradeMode
 	new.VerifyHTTPSClient = t.VerifyHTTPSClient
+
+	new.SetChecksum()
 	return new
 }
 
@@ -186,6 +196,57 @@ func (t *TLSConfig) Merge(b *TLSConfig) *TLSConfig {
 	return result
 }
 
+func getFileChecksum(filepath string) (string, error) {
+	f, err := os.Open(filepath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return string(h.Sum(nil)), nil
+}
+
+func createChecksum(a, b, c string) (string, error) {
+
+	first, err := getFileChecksum(a)
+	if err != nil {
+		return "", err
+	}
+
+	second, err := getFileChecksum(b)
+	if err != nil {
+		return "", err
+	}
+
+	third, err := getFileChecksum(b)
+	if err != nil {
+		return "", err
+	}
+
+	h := md5.New()
+	io.WriteString(h, first)
+	io.WriteString(h, second)
+	io.WriteString(h, third)
+
+	return string(h.Sum(nil)), nil
+}
+
+func (t *TLSConfig) SetChecksum() error {
+
+	newCertChecksum, err := createChecksum(t.CAFile, t.CertFile, t.KeyFile)
+	if err != nil {
+		return err
+	}
+
+	t.Checksum = newCertChecksum
+	return nil
+}
+
 // CertificateInfoIsEqual compares the fields of two TLS configuration objects
 // for the fields that are specific to configuring a TLS connection
 // It is possible for either the calling TLSConfig to be nil, or the TLSConfig
@@ -196,7 +257,10 @@ func (t *TLSConfig) CertificateInfoIsEqual(newConfig *TLSConfig) bool {
 		return t == newConfig
 	}
 
-	return t.CAFile == newConfig.CAFile &&
-		t.CertFile == newConfig.CertFile &&
-		t.KeyFile == newConfig.KeyFile
+	newCertChecksum, err := createChecksum(newConfig.CAFile, newConfig.CertFile, newConfig.KeyFile)
+	if err != nil {
+		return false
+	}
+
+	return t.Checksum == newCertChecksum
 }
